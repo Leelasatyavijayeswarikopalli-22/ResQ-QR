@@ -1,2 +1,2 @@
-Winner: XGBoost
+Winner: Random Forest
 Accuracy: 100.00%

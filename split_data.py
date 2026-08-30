@@ -1,28 +1,31 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# 1. Load the generated dataset
+# 1. Load Dataset
 df = pd.read_csv("telemetry_data.csv")
 
-# 2. Separate Features (X) and Target Label (y)
+# 2. Feature Columns
 feature_cols = [
-    "latency_ms",
+    "gateway_latency_ms",
+    "bank_latency_ms",
+    "total_latency_ms",
     "packet_loss_pct",
+    "payment_stage",
     "error_code_category",
     "is_timeout_flag",
     "order_amount_inr",
     "retry_count",
 ]
+
 X = df[feature_cols]
 y = df["action_label"]
 
-# 3. Perform Stratified Train-Test Split (80% Train, 20% Test)
-# Stratify ensures target class distribution is balanced across both splits
+# 3. Stratified Train-Test Split (80% Train, 20% Test)
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.20, random_state=42, stratify=y
 )
 
-# 4. Save Train and Test Sets to CSV Files
+# 4. Save CSVs
 X_train.assign(action_label=y_train).to_csv("train_data.csv", index=False)
 X_test.assign(action_label=y_test).to_csv("test_data.csv", index=False)
 
