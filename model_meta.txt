@@ -1,2 +1,4 @@
-Winner: Random Forest
-Accuracy: 100.00%
+Classification Winner: XGBoost
+Regression Winner: XGBoost
+Classification selection: Macro F1 followed by Weighted F1
+Regression selection: R2 followed by RMSE
