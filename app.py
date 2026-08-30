@@ -13,13 +13,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for Glassmorphism & UI Polishing
 st.markdown(
     """
     <style>
-    .main {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    }
+    .main { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
     .stCard {
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(10px);
@@ -40,12 +37,15 @@ st.markdown(
     .badge-red { background-color: #dc2626; color: white; }
     </style>
 """,
-    unsafe_allow_html=st.html if hasattr(st, "html") else "",
+    unsafe_allow_html=True,
 )
 
 FEATURE_COLS = [
-    "latency_ms",
+    "gateway_latency_ms",
+    "bank_latency_ms",
+    "total_latency_ms",
     "packet_loss_pct",
+    "payment_stage",
     "error_code_category",
     "is_timeout_flag",
     "order_amount_inr",
@@ -56,7 +56,7 @@ FEATURE_COLS = [
 @st.cache_resource
 def load_best_model():
     model = joblib.load("model.pkl")
-    meta_info = "XGBoost Engine"
+    meta_info = "Optimal ML Engine"
     if os.path.exists("model_meta.txt"):
         with open("model_meta.txt", "r") as f:
             meta_info = f.read().replace("\n", " | ")
@@ -65,23 +65,36 @@ def load_best_model():
 
 model, meta_info = load_best_model()
 
-# Header Section
 st.title("⚡ ResQ-QR: Payments Fallback Engine")
-st.caption(f"🧠 Active Intelligence: `{meta_info}`")
+st.caption(f"🧠 Active Engine: `{meta_info}`")
 
 tab1, tab2 = st.tabs(
-    ["🚀 Interactive Sandbox Demo", "📊 Model Telemetry & Weights"]
+    [
+        "🚀 Interactive Sandbox Demo",
+        "📊 Model Telemetry & Weights",
+    ]
 )
 
 with tab1:
     col_left, col_right = st.columns([1, 1], gap="large")
 
     with col_left:
-        st.subheader("1. Web Telemetry & Error Stream")
+        st.subheader("1. Payment Initialization & Telemetry")
 
         order_amount = st.number_input(
             "Transaction Value (INR)", value=499.00, step=50.0
         )
+
+        payment_stage_str = st.selectbox(
+            "Payment Lifecycle Stage",
+            [
+                "0: INITIATED (Checkout Launched)",
+                "1: AUTHENTICATING (User Entering PIN/OTP)",
+                "2: AUTHORIZING (PSP <-> Bank Handshake)",
+                "3: SETTLING (Finalizing Transaction)",
+            ],
+        )
+        payment_stage = int(payment_stage_str.split(":")[0])
 
         error_type = st.selectbox(
             "Simulated Gateway Exception",
@@ -93,30 +106,35 @@ with tab1:
         )
 
         st.markdown("---")
-        st.markdown("**Real-Time Network Telemetry**")
-        latency_ms = st.slider("Network Latency (RTT ms)", 50, 5000, 3200, 50)
+        st.markdown("**Real-Time Latency Breakdown (ms)**")
+        col_lat1, col_lat2 = st.columns(2)
+        with col_lat1:
+            gateway_latency = st.slider("Gateway Latency", 10, 3000, 1800, 50)
+        with col_lat2:
+            bank_latency = st.slider("Bank Host Latency", 10, 3000, 1400, 50)
+
+        total_latency = gateway_latency + bank_latency
+        st.caption(f"⏱ Total Round-Trip Latency: **{total_latency} ms**")
+
         packet_loss_pct = st.slider(
             "Packet Loss Rate (%)", 0.0, 30.0, 12.0, 0.5
         )
         retry_count = st.select_slider(
-            "Automated Retry Attempts", options=[0, 1, 2, 3], value=0
+            "Automated Retry Attempts",
+            options=[0, 1, 2, 3],
+            value=0,
         )
 
-        # Map UI Inputs to Features
-        error_category = (
-            2
-            if "TIMEOUT" in error_type
-            else (1 if "FUNDS" in error_type else 3)
-        )
-        is_timeout = (
-            1
-            if (
-                "TIMEOUT" in error_type
-                or latency_ms >= 2500
-                or packet_loss_pct >= 10.0
-            )
-            else 0
-        )
+        # Map Error Categories and Timeout Flags accurately
+        if "FUNDS" in error_type:
+            error_category = 1
+            is_timeout = 0
+        elif "TIMEOUT" in error_type:
+            error_category = 2
+            is_timeout = 1
+        else:
+            error_category = 3
+            is_timeout = 0
 
         run_sim = st.button(
             "⚡ Process Telemetry & Predict Action",
@@ -131,8 +149,11 @@ with tab1:
             input_df = pd.DataFrame(
                 [
                     [
-                        latency_ms,
+                        gateway_latency,
+                        bank_latency,
+                        total_latency,
                         packet_loss_pct,
+                        payment_stage,
                         error_category,
                         is_timeout,
                         order_amount,
@@ -151,13 +172,13 @@ with tab1:
                     "NO_ACTION",
                     "badge-red",
                     "Bank host offline or unrecoverable error. "
-                    "Halting retries to prevent duplicate debit.",
+                    "Halting retries to prevent duplicate debits.",
                 ),
                 1: (
                     "CONTEXTUAL_NUDGE",
                     "badge-orange",
                     "User-side error detected (Insufficient Funds / "
-                    "VPA). Nudge user via SMS/Push.",
+                    "VPA). Nudge user via SMS/Push notification.",
                 ),
                 2: (
                     "GENERATE_DYNAMIC_QR",
@@ -169,12 +190,12 @@ with tab1:
 
             label, badge_class, explanation = actions[pred_class]
 
-            # Custom Decision Card UI
             st.markdown(
                 f"""
                 <div class="stCard">
                     <h4>Recommended System Action</h4>
-                    <span class="metric-badge {badge_class}">{label}</span>
+                    <span class="metric-badge {badge_class}">{label}
+                    </span>
                     <p style="margin-top: 10px; color: #cbd5e1;">
                     {explanation}</p>
                     <small>Model Confidence: <strong>{confidence:.1f}%
@@ -184,7 +205,6 @@ with tab1:
                 unsafe_allow_html=True,
             )
 
-            # Display Probability Breakdown
             st.write("**Model Probability Distribution:**")
             probs_df = pd.DataFrame(
                 {
@@ -198,7 +218,6 @@ with tab1:
             )
             st.bar_chart(probs_df.set_index("Action"))
 
-            # Render Micro-QR Card if fallback triggered
             if pred_class == 2:
                 deeplink = (
                     f"upi://pay?pa=resqstore@upi&pn=ResQStore"
@@ -223,14 +242,15 @@ with tab1:
                 )
         else:
             st.info(
-                "👈 Adjust telemetry sliders and click "
+                "👈 Adjust telemetry parameters and click "
                 "**Process Telemetry** to trigger decision engine."
             )
 
 with tab2:
     st.subheader("Predictive Feature Weights")
     st.caption(
-        "Shows feature importance ranking computed by the trained model."
+        "Shows feature importance ranking computed by the "
+        "trained model."
     )
 
     if hasattr(model, "feature_importances_"):
