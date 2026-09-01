@@ -1,8 +1,9 @@
 streamlit
 numpy
 pandas
-scikit-learn
-joblib
-qrcode[pil]
-plotly
+scikit-learn==1.9.0
+joblib==1.5.3
+xgboost==3.4.1
+qrcode
 Pillow
+plotly

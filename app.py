@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 import secrets
+import textwrap
 from urllib.parse import quote
 from html import escape
 
@@ -329,6 +330,7 @@ def resolve_payment_token(token):
 # PAYMENT RESOLVER
 # ===================================================================
 
+
 payment_token = st.query_params.get(
     "payment_token"
 )
@@ -351,43 +353,57 @@ if payment_token:
 
         st.stop()
 
+
+    # ---------------------------------------------------------------
+    # BUILD UPI PAYMENT URL
+    # ---------------------------------------------------------------
+
     resolved_upi_url = build_upi_payment_url(
         resolved_payment
     )
 
+
+    # ---------------------------------------------------------------
+    # SAFE DISPLAY VALUES
+    # ---------------------------------------------------------------
+
     safe_transaction = escape(
-        resolved_payment["transaction_id"]
+        str(resolved_payment["transaction_id"])
     )
 
     safe_merchant = escape(
-        resolved_payment["merchant_name"]
+        str(resolved_payment["merchant_name"])
     )
 
     safe_upi = escape(
-        resolved_payment["upi_id"]
+        str(resolved_payment["upi_id"])
     )
 
     safe_token = escape(
-        resolved_payment["token"]
+        str(resolved_payment["token"])
     )
 
     amount_display = (
-        f"₹{resolved_payment['amount']:.2f}"
+        f"₹{float(resolved_payment['amount']):.2f}"
     )
 
-    st.markdown(
+
+    # ===============================================================
+    # PAYMENT DETAILS CARD
+    # ===============================================================
+
+    payment_html = textwrap.dedent(
         f"""
         <div style="
             max-width:650px;
             margin:60px auto;
             padding:35px;
             border-radius:24px;
-            background:
-                linear-gradient(
-                    145deg,
-                    rgba(25,55,95,0.96),
-                    rgba(18,45,82,0.94)
-                );
+            background:linear-gradient(
+                145deg,
+                rgba(25,55,95,0.96),
+                rgba(18,45,82,0.94)
+            );
             border:1px solid rgba(96,165,250,0.40);
             box-shadow:0 20px 60px rgba(0,0,0,0.35);
             text-align:center;
@@ -445,11 +461,17 @@ if payment_token:
             </div>
 
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    st.markdown(
+    st.html(payment_html)
+
+
+    # ===============================================================
+    # OPEN UPI PAYMENT BUTTON
+    # ===============================================================
+
+    upi_button_html = textwrap.dedent(
         f"""
         <div style="
             max-width:650px;
@@ -458,7 +480,7 @@ if payment_token:
         ">
 
             <a
-                href="{escape(resolved_upi_url)}"
+                href="{escape(str(resolved_upi_url))}"
                 style="
                     display:inline-block;
                     padding:15px 30px;
@@ -474,14 +496,21 @@ if payment_token:
             </a>
 
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
+
+    st.html(upi_button_html)
+
+
+    # ===============================================================
+    # UPI INFORMATION
+    # ===============================================================
 
     st.info(
         "If your device supports UPI deep links, "
         "the button above can open an installed UPI application."
     )
+
 
     st.stop()
 
@@ -942,12 +971,12 @@ st.markdown(
     background:
         linear-gradient(
             145deg,
-            rgba(25, 55, 95, 0.96),
-            rgba(18, 45, 82, 0.92)
+            rgba(125, 55, 95, 0.96),
+            rgba(18, 145, 82, 0.92)
         );
 
     border:
-        1px solid rgba(96, 165, 250, 0.28);
+        1px solid rgba(171, 178, 177, 0.40);
 
     box-shadow:
         0 10px 28px rgba(0, 0, 0, 0.22);
@@ -3219,15 +3248,6 @@ with tab3:
                 st.caption(
                     description
                 )
-
-
-    # ---------------------------------------------------------------
-    # FLOW INDICATOR
-    # ---------------------------------------------------------------
-
-    st.markdown(
-        "⬇️  **Infrastructure degradation is passed forward**  ⬇️"
-    )
 
 
     # ---------------------------------------------------------------
