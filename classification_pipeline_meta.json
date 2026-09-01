@@ -1,0 +1,41 @@
+{
+    "regression_features": [
+        "network_latency_ms",
+        "packet_loss_pct",
+        "network_jitter_ms",
+        "gateway_latency_ms",
+        "gateway_failure_rate_pct",
+        "gateway_timeout_rate_pct",
+        "bank_latency_ms",
+        "bank_failure_rate_pct",
+        "bank_timeout_rate_pct",
+        "error_code_category",
+        "is_timeout_flag"
+    ],
+    "classification_features": [
+        "predicted_network_degradation",
+        "predicted_gateway_degradation",
+        "predicted_bank_degradation"
+    ],
+    "regression_targets": [
+        "true_network_degradation",
+        "true_gateway_degradation",
+        "true_bank_degradation"
+    ],
+    "best_regression_model": "XGBoost",
+    "best_classification_model": "Random Forest",
+    "oof_folds": 5,
+    "classification_training_method": "5-fold out-of-fold regression predictions",
+    "oof_used_for_classification_training": true,
+    "action_label_mapping": {
+        "1": "CONTEXTUAL_NUDGE",
+        "2": "NO_ACTION",
+        "3": "GENERATE_DYNAMIC_QR"
+    },
+    "xgboost_label_encoding": {
+        "dataset_1": "internal_0",
+        "dataset_2": "internal_1",
+        "dataset_3": "internal_2"
+    },
+    "architecture": "Raw telemetry -> regression -> 3 degradation scores -> classification -> action label 1/2/3"
+}

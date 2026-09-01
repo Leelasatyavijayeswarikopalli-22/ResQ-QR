@@ -5,504 +5,1619 @@ import pandas as pd
 # ============================================================
 # RESQ-QR SYNTHETIC PAYMENT TELEMETRY GENERATOR
 # ============================================================
+#
+# TOTAL DATASET
+# ----------------
+# 10,000 samples
+#
+# CLASS 1:
+# NO_ACTION
+# Bank degradation
+#
+# CLASS 2:
+# CONTEXTUAL_NUDGE
+# Gateway degradation
+#
+# CLASS 3:
+# GENERATE_DYNAMIC_QR
+# Network degradation
+#
+# ============================================================
+#
+# IMPORTANT:
+#
+# payment_stage is completely removed.
+#
+# The following fields are NOT regression features:
+#
+# total_latency_ms
+# transaction_age_ms
+# retry_count
+# order_amount_inr
+#
+# They are included only as transaction metadata.
+#
+# ============================================================
+
 
 np.random.seed(42)
 
-N_SAMPLES = 6000
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+TOTAL_SAMPLES = 10000
+
+CLASS_1_COUNT = 3333
+CLASS_2_COUNT = 3333
+CLASS_3_COUNT = 3334
 
 
-# ------------------------------------------------------------
-# 1. COMPONENT DEGRADATION
-#
-# These are hidden "true" system conditions.
-# The ML model will NOT receive these directly.
-#
-# 0   = healthy
-# 100 = severely degraded
-# ------------------------------------------------------------
+# ============================================================
+# NETWORK GENERATION PROFILES
+# ============================================================
 
-network_degradation = np.clip(
-    np.random.beta(2.0, 4.0, N_SAMPLES) * 100,
-    0,
-    100,
-)
+NETWORK_PROFILES = {
 
-gateway_degradation = np.clip(
-    np.random.beta(2.0, 4.0, N_SAMPLES) * 100,
-    0,
-    100,
-)
+    "2G/EDGE": {
 
-bank_degradation = np.clip(
-    np.random.beta(2.0, 4.0, N_SAMPLES) * 100,
-    0,
-    100,
-)
+        "latency": (300, 900),
 
+        "packet_loss": (1.0, 4.0),
 
-# ------------------------------------------------------------
-# 2. OBSERVABLE TELEMETRY
-# ------------------------------------------------------------
+        "jitter": (15, 40),
 
-# Network latency increases with network degradation.
-network_latency = (
-    80
-    + network_degradation * 18
-    + np.random.normal(0, 80, N_SAMPLES)
-)
+    },
 
-network_latency = np.clip(network_latency, 30, 5000)
+    "3G": {
 
+        "latency": (80, 300),
 
-# Packet loss increases with network degradation.
-packet_loss = (
-    network_degradation * 0.16
-    + np.random.normal(0, 0.8, N_SAMPLES)
-)
+        "packet_loss": (0.3, 2.0),
 
-packet_loss = np.clip(packet_loss, 0, 30)
+        "jitter": (8, 25),
 
+    },
 
-# Network jitter also increases when the network is unhealthy.
-network_jitter = (
-    5
-    + network_degradation * 0.35
-    + np.random.normal(0, 3, N_SAMPLES)
-)
+    "4G/LTE": {
 
-network_jitter = np.clip(network_jitter, 1, 150)
+        "latency": (20, 120),
+
+        "packet_loss": (0.05, 1.0),
+
+        "jitter": (3, 15),
+
+    },
+
+    "5G": {
+
+        "latency": (5, 60),
+
+        "packet_loss": (0.01, 0.5),
+
+        "jitter": (1, 8),
+
+    },
+
+    "Wi-Fi 6/7": {
+
+        "latency": (5, 50),
+
+        "packet_loss": (0.01, 0.4),
+
+        "jitter": (1, 6),
+
+    },
+
+}
 
 
-# Gateway latency depends mainly on gateway degradation.
-gateway_latency = (
-    70
-    + gateway_degradation * 20
-    + network_degradation * 3
-    + np.random.normal(0, 100, N_SAMPLES)
-)
+# ============================================================
+# NETWORK GENERATION SAMPLER
+# ============================================================
 
-gateway_latency = np.clip(gateway_latency, 30, 5000)
+def choose_network_generation():
 
+    generations = [
 
-# Bank latency depends mainly on bank degradation.
-bank_latency = (
-    90
-    + bank_degradation * 22
-    + np.random.normal(0, 100, N_SAMPLES)
-)
+        "2G/EDGE",
+        "3G",
+        "4G/LTE",
+        "5G",
+        "Wi-Fi 6/7",
 
-bank_latency = np.clip(bank_latency, 30, 5000)
+    ]
 
+    probabilities = [
 
-total_latency = (
-    gateway_latency
-    + bank_latency
-    + network_latency
-)
+        0.08,
+        0.12,
+        0.35,
+        0.30,
+        0.15,
 
+    ]
 
-# ------------------------------------------------------------
-# 3. FAILURE / HEALTH SIGNALS
-# ------------------------------------------------------------
+    return np.random.choice(
 
-gateway_failure_rate = np.clip(
-    gateway_degradation * 0.7
-    + np.random.normal(0, 4, N_SAMPLES),
-    0,
-    100,
-)
+        generations,
 
-gateway_timeout_rate = np.clip(
-    gateway_degradation * 0.6
-    + network_degradation * 0.2
-    + np.random.normal(0, 4, N_SAMPLES),
-    0,
-    100,
-)
+        p=probabilities,
 
-bank_failure_rate = np.clip(
-    bank_degradation * 0.7
-    + np.random.normal(0, 4, N_SAMPLES),
-    0,
-    100,
-)
-
-bank_timeout_rate = np.clip(
-    bank_degradation * 0.6
-    + np.random.normal(0, 4, N_SAMPLES),
-    0,
-    100,
-)
-
-
-# ------------------------------------------------------------
-# 4. RETRIES
-# ------------------------------------------------------------
-
-retry_probability = (
-    0.05
-    + network_degradation / 250
-    + gateway_degradation / 250
-    + bank_degradation / 300
-)
-
-retry_probability = np.clip(retry_probability, 0.02, 0.9)
-
-retry_count = np.random.binomial(
-    3,
-    retry_probability,
-    N_SAMPLES,
-)
-
-retry_count = np.clip(retry_count, 0, 3)
-
-
-# ------------------------------------------------------------
-# 5. PAYMENT STAGE
-#
-# 0 = INITIATED
-# 1 = AUTHENTICATING
-# 2 = AUTHORIZING
-# 3 = SETTLING
-# ------------------------------------------------------------
-
-payment_stage = np.random.choice(
-    [0, 1, 2, 3],
-    size=N_SAMPLES,
-    p=[0.15, 0.30, 0.40, 0.15],
-)
-
-
-# ------------------------------------------------------------
-# 6. TRANSACTION AGE
-# ------------------------------------------------------------
-
-transaction_age_ms = (
-    500
-    + total_latency * 0.8
-    + retry_count * 1200
-    + np.random.normal(0, 500, N_SAMPLES)
-)
-
-transaction_age_ms = np.clip(
-    transaction_age_ms,
-    100,
-    20000,
-)
-
-
-# ------------------------------------------------------------
-# 7. ORDER AMOUNT
-# ------------------------------------------------------------
-
-order_amount = np.random.uniform(
-    100,
-    15000,
-    N_SAMPLES,
-)
-
-
-# ------------------------------------------------------------
-# 8. ERROR CATEGORIES
-#
-# 0 = NONE
-# 1 = INSUFFICIENT_FUNDS
-# 2 = TIMEOUT
-# 3 = BANK_OFFLINE
-# ------------------------------------------------------------
-
-error_code = np.zeros(N_SAMPLES, dtype=int)
-
-for i in range(N_SAMPLES):
-
-    # Bank degradation can result in bank-offline errors.
-    if bank_degradation[i] > 82:
-        error_code[i] = 3
-
-    # User balance error is independent of infrastructure.
-    elif np.random.random() < 0.12:
-        error_code[i] = 1
-
-    # High network/gateway degradation can cause timeouts.
-    elif (
-        network_degradation[i] > 70
-        or gateway_degradation[i] > 75
-        or total_latency[i] > 5000
-    ):
-        error_code[i] = 2
-
-    else:
-        error_code[i] = 0
-
-
-# ------------------------------------------------------------
-# 9. TIMEOUT FLAG
-# ------------------------------------------------------------
-
-is_timeout = (
-    (
-        (total_latency > 5000)
-        | (gateway_timeout_rate > 45)
-        | (network_degradation > 75)
-        | (error_code == 2)
     )
-).astype(int)
 
 
-# ------------------------------------------------------------
-# 10. HEALTH SCORES
-# ------------------------------------------------------------
+# ============================================================
+# CLAMP FUNCTION
+# ============================================================
 
-network_health = 100 - network_degradation
-gateway_health = 100 - gateway_degradation
-bank_health = 100 - bank_degradation
+def clamp(value, low, high):
 
+    return max(
 
-# ------------------------------------------------------------
-# 11. DERIVED SIGNALS
-# ------------------------------------------------------------
+        low,
 
-network_stress = np.clip(
-    (
-        network_latency / 50
-        + packet_loss * 3
-        + network_jitter / 10
-    ) / 3,
-    0,
-    100,
-)
+        min(value, high),
 
-gateway_stress = np.clip(
-    (
-        gateway_latency / 50
-        + gateway_failure_rate
-        + gateway_timeout_rate
-    ) / 3,
-    0,
-    100,
-)
-
-bank_stress = np.clip(
-    (
-        bank_latency / 50
-        + bank_failure_rate
-        + bank_timeout_rate
-    ) / 3,
-    0,
-    100,
-)
+    )
 
 
-# ------------------------------------------------------------
-# 12. CLASSIFICATION TARGET
-#
-# 0 = NO_ACTION
-# 1 = CONTEXTUAL_NUDGE
-# 2 = RETRY_PAYMENT
-# 3 = GENERATE_DYNAMIC_QR
-#
-# The target is based on the simulated payment environment.
-# There are NO manually assigned component percentages.
-# ------------------------------------------------------------
+# ============================================================
+# NETWORK TELEMETRY
+# ============================================================
 
-actions = np.zeros(N_SAMPLES, dtype=int)
+def generate_network_telemetry(
+
+    generation,
+
+    network_degraded,
+
+):
+
+    profile = NETWORK_PROFILES[generation]
 
 
-for i in range(N_SAMPLES):
+    base_latency = np.random.uniform(
+
+        profile["latency"][0],
+
+        profile["latency"][1],
+
+    )
+
+
+    base_packet_loss = np.random.uniform(
+
+        profile["packet_loss"][0],
+
+        profile["packet_loss"][1],
+
+    )
+
+
+    base_jitter = np.random.uniform(
+
+        profile["jitter"][0],
+
+        profile["jitter"][1],
+
+    )
+
 
     # --------------------------------------------------------
-    # User-side problem
+    # NETWORK DEGRADATION SCENARIO
     # --------------------------------------------------------
-    if error_code[i] == 1:
-        actions[i] = 1
 
-    # --------------------------------------------------------
-    # Settlement stage is highly sensitive.
-    # We don't aggressively retry/redirect it.
-    # --------------------------------------------------------
-    elif payment_stage[i] == 3:
+    if network_degraded:
 
-        if bank_degradation[i] > 80:
-            actions[i] = 0
+        severity = np.random.uniform(
 
-        elif transaction_age_ms[i] > 9000:
-            actions[i] = 0
+            0.65,
 
-        elif retry_count[i] >= 2:
-            actions[i] = 0
+            1.00,
 
-        else:
-            actions[i] = 0
-
-    # --------------------------------------------------------
-    # Bank is severely unhealthy.
-    # Avoid retrying or QR when issuer itself is unavailable.
-    # --------------------------------------------------------
-    elif error_code[i] == 3 or bank_degradation[i] > 82:
-
-        actions[i] = 0
-
-    # --------------------------------------------------------
-    # Severe network/gateway degradation.
-    # QR becomes the preferred fallback.
-    # --------------------------------------------------------
-    elif (
-        network_degradation[i] > 72
-        and gateway_degradation[i] > 60
-    ):
-
-        actions[i] = 3
-
-    elif (
-        network_degradation[i] > 78
-        or gateway_degradation[i] > 82
-        or packet_loss[i] > 12
-        or gateway_timeout_rate[i] > 50
-    ):
-
-        actions[i] = 3
-
-    # --------------------------------------------------------
-    # Moderate degradation.
-    # Retry can be useful if retry budget remains.
-    # --------------------------------------------------------
-    elif (
-        (
-            network_degradation[i] > 45
-            or gateway_degradation[i] > 45
         )
-        and retry_count[i] < 2
-        and transaction_age_ms[i] < 7000
-    ):
 
-        actions[i] = 2
 
-    # --------------------------------------------------------
-    # Clean transaction.
-    # --------------------------------------------------------
+        latency = (
+
+            base_latency
+
+            + severity * np.random.uniform(
+
+                150,
+
+                850,
+
+            )
+
+        )
+
+
+        packet_loss = (
+
+            base_packet_loss
+
+            + severity * np.random.uniform(
+
+                1.0,
+
+                5.0,
+
+            )
+
+        )
+
+
+        jitter = (
+
+            base_jitter
+
+            + severity * np.random.uniform(
+
+                20,
+
+                70,
+
+            )
+
+        )
+
+
     else:
-        actions[i] = 0
+
+        latency = base_latency
+
+        packet_loss = base_packet_loss
+
+        jitter = base_jitter
 
 
-# ------------------------------------------------------------
-# 13. CREATE DATAFRAME
-# ------------------------------------------------------------
+    return (
 
-df = pd.DataFrame(
-    {
-        # Network
-        "network_latency_ms": np.round(network_latency, 2),
-        "packet_loss_pct": np.round(packet_loss, 2),
-        "network_jitter_ms": np.round(network_jitter, 2),
+        round(latency, 2),
 
-        # Gateway
-        "gateway_latency_ms": np.round(gateway_latency, 2),
-        "gateway_failure_rate_pct": np.round(
-            gateway_failure_rate,
-            2,
-        ),
-        "gateway_timeout_rate_pct": np.round(
-            gateway_timeout_rate,
-            2,
-        ),
+        round(
 
-        # Bank
-        "bank_latency_ms": np.round(bank_latency, 2),
-        "bank_failure_rate_pct": np.round(
-            bank_failure_rate,
-            2,
-        ),
-        "bank_timeout_rate_pct": np.round(
-            bank_timeout_rate,
-            2,
+            clamp(
+
+                packet_loss,
+
+                0.001,
+
+                10.0,
+
+            ),
+
+            4,
+
         ),
 
-        # Transaction
-        "total_latency_ms": np.round(total_latency, 2),
-        "payment_stage": payment_stage,
-        "transaction_age_ms": np.round(
-            transaction_age_ms,
+        round(
+
+            clamp(
+
+                jitter,
+
+                0.1,
+
+                100.0,
+
+            ),
+
             2,
+
         ),
+
+    )
+
+
+# ============================================================
+# GATEWAY TELEMETRY
+# ============================================================
+
+def generate_gateway_telemetry(
+
+    gateway_degraded,
+
+):
+
+    # Healthy gateway baseline
+
+    latency = np.random.uniform(
+
+        40,
+
+        140,
+
+    )
+
+
+    failure_rate = np.random.uniform(
+
+        0.05,
+
+        0.20,
+
+    )
+
+
+    timeout_rate = np.random.uniform(
+
+        0.10,
+
+        0.30,
+
+    )
+
+
+    # --------------------------------------------------------
+    # Gateway degradation
+    # --------------------------------------------------------
+
+    if gateway_degraded:
+
+        severity = np.random.uniform(
+
+            0.70,
+
+            1.00,
+
+        )
+
+
+        latency = np.random.uniform(
+
+            150,
+
+            1200,
+
+        ) * severity + 100
+
+
+        failure_rate = np.random.uniform(
+
+            0.20,
+
+            0.50,
+
+        )
+
+
+        timeout_rate = np.random.uniform(
+
+            0.30,
+
+            0.50,
+
+        )
+
+
+    return (
+
+        round(latency, 2),
+
+        round(
+
+            clamp(
+
+                failure_rate,
+
+                0.05,
+
+                0.50,
+
+            ),
+
+            4,
+
+        ),
+
+        round(
+
+            clamp(
+
+                timeout_rate,
+
+                0.10,
+
+                0.50,
+
+            ),
+
+            4,
+
+        ),
+
+    )
+
+
+# ============================================================
+# BANK TELEMETRY
+# ============================================================
+#
+# Normal bank latency:
+# 200–400 ms
+#
+# Failure:
+# 0.1–1.5%
+#
+# Timeout:
+# 1–3%
+#
+# ============================================================
+
+def generate_bank_telemetry(
+
+    bank_degraded,
+
+):
+
+    if bank_degraded:
+
+        severity = np.random.uniform(
+
+            0.65,
+
+            1.00,
+
+        )
+
+
+        latency = np.random.uniform(
+
+            200,
+
+            400,
+
+        ) + severity * np.random.uniform(
+
+            250,
+
+            900,
+
+        )
+
+
+        failure_rate = np.random.uniform(
+
+            0.70,
+
+            1.50,
+
+        )
+
+
+        timeout_rate = np.random.uniform(
+
+            1.80,
+
+            3.00,
+
+        )
+
+
+    else:
+
+        latency = np.random.uniform(
+
+            200,
+
+            400,
+
+        )
+
+
+        failure_rate = np.random.uniform(
+
+            0.10,
+
+            0.30,
+
+        )
+
+
+        timeout_rate = np.random.uniform(
+
+            1.00,
+
+            1.80,
+
+        )
+
+
+    return (
+
+        round(latency, 2),
+
+        round(
+
+            clamp(
+
+                failure_rate,
+
+                0.10,
+
+                1.50,
+
+            ),
+
+            4,
+
+        ),
+
+        round(
+
+            clamp(
+
+                timeout_rate,
+
+                1.00,
+
+                3.00,
+
+            ),
+
+            4,
+
+        ),
+
+    )
+
+
+# ============================================================
+# NETWORK DEGRADATION SCORE
+# ============================================================
+
+def calculate_network_degradation(
+
+    latency,
+
+    packet_loss,
+
+    jitter,
+
+):
+
+    latency_score = np.clip(
+
+        (
+
+            latency - 20
+
+        ) / 850 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    loss_score = np.clip(
+
+        packet_loss / 5.0 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    jitter_score = np.clip(
+
+        (
+
+            jitter - 2
+
+        ) / 70 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    score = (
+
+        0.50 * latency_score
+
+        + 0.30 * loss_score
+
+        + 0.20 * jitter_score
+
+    )
+
+
+    return round(
+
+        np.clip(score, 0, 100),
+
+        2,
+
+    )
+
+
+# ============================================================
+# GATEWAY DEGRADATION SCORE
+# ============================================================
+
+def calculate_gateway_degradation(
+
+    latency,
+
+    failure_rate,
+
+    timeout_rate,
+
+):
+
+    latency_score = np.clip(
+
+        (
+
+            latency - 40
+
+        ) / 1200 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    failure_score = np.clip(
+
+        (
+
+            failure_rate - 0.05
+
+        ) / 0.45 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    timeout_score = np.clip(
+
+        (
+
+            timeout_rate - 0.10
+
+        ) / 0.40 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    score = (
+
+        0.45 * latency_score
+
+        + 0.30 * failure_score
+
+        + 0.25 * timeout_score
+
+    )
+
+
+    return round(
+
+        np.clip(score, 0, 100),
+
+        2,
+
+    )
+
+
+# ============================================================
+# BANK DEGRADATION SCORE
+# ============================================================
+
+def calculate_bank_degradation(
+
+    latency,
+
+    failure_rate,
+
+    timeout_rate,
+
+):
+
+    latency_score = np.clip(
+
+        (
+
+            latency - 200
+
+        ) / 900 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    failure_score = np.clip(
+
+        (
+
+            failure_rate - 0.10
+
+        ) / 1.40 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    timeout_score = np.clip(
+
+        (
+
+            timeout_rate - 1.00
+
+        ) / 2.00 * 100,
+
+        0,
+
+        100,
+
+    )
+
+
+    score = (
+
+        0.45 * latency_score
+
+        + 0.25 * failure_score
+
+        + 0.30 * timeout_score
+
+    )
+
+
+    return round(
+
+        np.clip(score, 0, 100),
+
+        2,
+
+    )
+
+
+# ============================================================
+# ERROR CATEGORY
+# ============================================================
+
+def generate_error_category(
+
+    network_degraded,
+
+    gateway_degraded,
+
+    bank_degraded,
+
+):
+
+    if network_degraded:
+
+        return np.random.choice(
+
+            [0, 1],
+
+            p=[0.30, 0.70],
+
+        )
+
+
+    if gateway_degraded:
+
+        return np.random.choice(
+
+            [0, 2],
+
+            p=[0.25, 0.75],
+
+        )
+
+
+    if bank_degraded:
+
+        return np.random.choice(
+
+            [0, 3],
+
+            p=[0.20, 0.80],
+
+        )
+
+
+    return 0
+
+
+# ============================================================
+# GENERATE DATA
+# ============================================================
+
+rows = []
+
+
+# ============================================================
+# CLASS 1
+# BANK DEGRADATION
+# ============================================================
+
+for _ in range(CLASS_1_COUNT):
+
+    generation = choose_network_generation()
+
+
+    network_latency, packet_loss, network_jitter = (
+
+        generate_network_telemetry(
+
+            generation,
+
+            network_degraded=False,
+
+        )
+
+    )
+
+
+    gateway_latency, gateway_failure, gateway_timeout = (
+
+        generate_gateway_telemetry(
+
+            gateway_degraded=False,
+
+        )
+
+    )
+
+
+    bank_latency, bank_failure, bank_timeout = (
+
+        generate_bank_telemetry(
+
+            bank_degraded=True,
+
+        )
+
+    )
+
+
+    network_deg = calculate_network_degradation(
+
+        network_latency,
+
+        packet_loss,
+
+        network_jitter,
+
+    )
+
+
+    gateway_deg = calculate_gateway_degradation(
+
+        gateway_latency,
+
+        gateway_failure,
+
+        gateway_timeout,
+
+    )
+
+
+    bank_deg = calculate_bank_degradation(
+
+        bank_latency,
+
+        bank_failure,
+
+        bank_timeout,
+
+    )
+
+
+    error_category = generate_error_category(
+
+        False,
+
+        False,
+
+        True,
+
+    )
+
+
+    is_timeout = int(
+
+        bank_timeout >= 2.0
+
+    )
+
+
+    total_latency = (
+
+        network_latency
+
+        + gateway_latency
+
+        + bank_latency
+
+    )
+
+
+    transaction_age = np.random.uniform(
+
+        300,
+
+        8000,
+
+    )
+
+
+    retry_count = np.random.choice(
+
+        [0, 1, 2, 3],
+
+        p=[0.35, 0.35, 0.20, 0.10],
+
+    )
+
+
+    order_amount = np.random.uniform(
+
+        50,
+
+        50000,
+
+    )
+
+
+    rows.append({
+
+        "action_label": 1,
+
+        "network_generation": generation,
+
+        "network_latency_ms": network_latency,
+
+        "packet_loss_pct": packet_loss,
+
+        "network_jitter_ms": network_jitter,
+
+        "gateway_latency_ms": gateway_latency,
+
+        "gateway_failure_rate_pct": gateway_failure,
+
+        "gateway_timeout_rate_pct": gateway_timeout,
+
+        "bank_latency_ms": bank_latency,
+
+        "bank_failure_rate_pct": bank_failure,
+
+        "bank_timeout_rate_pct": bank_timeout,
+
+        "total_latency_ms": round(
+
+            total_latency,
+
+            2,
+
+        ),
+
+        "transaction_age_ms": round(
+
+            transaction_age,
+
+            2,
+
+        ),
+
         "retry_count": retry_count,
-        "order_amount_inr": np.round(
+
+        "order_amount_inr": round(
+
             order_amount,
+
             2,
+
         ),
 
-        # Errors
-        "error_code_category": error_code,
+        "error_code_category": error_category,
+
         "is_timeout_flag": is_timeout,
 
-        # Hidden regression targets
-        #
-        # These are not used as input features.
-        # The regression model learns to estimate them.
-        "true_network_degradation": np.round(
-            network_degradation,
-            2,
-        ),
-        "true_gateway_degradation": np.round(
-            gateway_degradation,
-            2,
-        ),
-        "true_bank_degradation": np.round(
-            bank_degradation,
-            2,
-        ),
+        "true_network_degradation": network_deg,
 
-        # Classification target
-        "action_label": actions,
-    }
-)
+        "true_gateway_degradation": gateway_deg,
+
+        "true_bank_degradation": bank_deg,
+
+    })
 
 
-# ------------------------------------------------------------
-# 14. SAVE DATA
-# ------------------------------------------------------------
+# ============================================================
+# CLASS 2
+# GATEWAY DEGRADATION
+# ============================================================
+
+for _ in range(CLASS_2_COUNT):
+
+    generation = choose_network_generation()
+
+
+    network_latency, packet_loss, network_jitter = (
+
+        generate_network_telemetry(
+
+            generation,
+
+            network_degraded=False,
+
+        )
+
+    )
+
+
+    gateway_latency, gateway_failure, gateway_timeout = (
+
+        generate_gateway_telemetry(
+
+            gateway_degraded=True,
+
+        )
+
+    )
+
+
+    bank_latency, bank_failure, bank_timeout = (
+
+        generate_bank_telemetry(
+
+            bank_degraded=False,
+
+        )
+
+    )
+
+
+    network_deg = calculate_network_degradation(
+
+        network_latency,
+
+        packet_loss,
+
+        network_jitter,
+
+    )
+
+
+    gateway_deg = calculate_gateway_degradation(
+
+        gateway_latency,
+
+        gateway_failure,
+
+        gateway_timeout,
+
+    )
+
+
+    bank_deg = calculate_bank_degradation(
+
+        bank_latency,
+
+        bank_failure,
+
+        bank_timeout,
+
+    )
+
+
+    error_category = generate_error_category(
+
+        False,
+
+        True,
+
+        False,
+
+    )
+
+
+    is_timeout = int(
+
+        gateway_timeout >= 0.35
+
+    )
+
+
+    total_latency = (
+
+        network_latency
+
+        + gateway_latency
+
+        + bank_latency
+
+    )
+
+
+    transaction_age = np.random.uniform(
+
+        300,
+
+        8000,
+
+    )
+
+
+    retry_count = np.random.choice(
+
+        [0, 1, 2, 3],
+
+        p=[0.35, 0.35, 0.20, 0.10],
+
+    )
+
+
+    order_amount = np.random.uniform(
+
+        50,
+
+        50000,
+
+    )
+
+
+    rows.append({
+
+        "action_label": 2,
+
+        "network_generation": generation,
+
+        "network_latency_ms": network_latency,
+
+        "packet_loss_pct": packet_loss,
+
+        "network_jitter_ms": network_jitter,
+
+        "gateway_latency_ms": gateway_latency,
+
+        "gateway_failure_rate_pct": gateway_failure,
+
+        "gateway_timeout_rate_pct": gateway_timeout,
+
+        "bank_latency_ms": bank_latency,
+
+        "bank_failure_rate_pct": bank_failure,
+
+        "bank_timeout_rate_pct": bank_timeout,
+
+        "total_latency_ms": round(
+
+            total_latency,
+
+            2,
+
+        ),
+
+        "transaction_age_ms": round(
+
+            transaction_age,
+
+            2,
+
+        ),
+
+        "retry_count": retry_count,
+
+        "order_amount_inr": round(
+
+            order_amount,
+
+            2,
+
+        ),
+
+        "error_code_category": error_category,
+
+        "is_timeout_flag": is_timeout,
+
+        "true_network_degradation": network_deg,
+
+        "true_gateway_degradation": gateway_deg,
+
+        "true_bank_degradation": bank_deg,
+
+    })
+
+
+# ============================================================
+# CLASS 3
+# NETWORK DEGRADATION
+# ============================================================
+
+for _ in range(CLASS_3_COUNT):
+
+    generation = choose_network_generation()
+
+
+    network_latency, packet_loss, network_jitter = (
+
+        generate_network_telemetry(
+
+            generation,
+
+            network_degraded=True,
+
+        )
+
+    )
+
+
+    gateway_latency, gateway_failure, gateway_timeout = (
+
+        generate_gateway_telemetry(
+
+            gateway_degraded=False,
+
+        )
+
+    )
+
+
+    bank_latency, bank_failure, bank_timeout = (
+
+        generate_bank_telemetry(
+
+            bank_degraded=False,
+
+        )
+
+    )
+
+
+    network_deg = calculate_network_degradation(
+
+        network_latency,
+
+        packet_loss,
+
+        network_jitter,
+
+    )
+
+
+    gateway_deg = calculate_gateway_degradation(
+
+        gateway_latency,
+
+        gateway_failure,
+
+        gateway_timeout,
+
+    )
+
+
+    bank_deg = calculate_bank_degradation(
+
+        bank_latency,
+
+        bank_failure,
+
+        bank_timeout,
+
+    )
+
+
+    error_category = generate_error_category(
+
+        True,
+
+        False,
+
+        False,
+
+    )
+
+
+    is_timeout = int(
+
+        network_latency >= 500
+
+    )
+
+
+    total_latency = (
+
+        network_latency
+
+        + gateway_latency
+
+        + bank_latency
+
+    )
+
+
+    transaction_age = np.random.uniform(
+
+        300,
+
+        8000,
+
+    )
+
+
+    retry_count = np.random.choice(
+
+        [0, 1, 2, 3],
+
+        p=[0.35, 0.35, 0.20, 0.10],
+
+    )
+
+
+    order_amount = np.random.uniform(
+
+        50,
+
+        50000,
+
+    )
+
+
+    rows.append({
+
+        "action_label": 3,
+
+        "network_generation": generation,
+
+        "network_latency_ms": network_latency,
+
+        "packet_loss_pct": packet_loss,
+
+        "network_jitter_ms": network_jitter,
+
+        "gateway_latency_ms": gateway_latency,
+
+        "gateway_failure_rate_pct": gateway_failure,
+
+        "gateway_timeout_rate_pct": gateway_timeout,
+
+        "bank_latency_ms": bank_latency,
+
+        "bank_failure_rate_pct": bank_failure,
+
+        "bank_timeout_rate_pct": bank_timeout,
+
+        "total_latency_ms": round(
+
+            total_latency,
+
+            2,
+
+        ),
+
+        "transaction_age_ms": round(
+
+            transaction_age,
+
+            2,
+
+        ),
+
+        "retry_count": retry_count,
+
+        "order_amount_inr": round(
+
+            order_amount,
+
+            2,
+
+        ),
+
+        "error_code_category": error_category,
+
+        "is_timeout_flag": is_timeout,
+
+        "true_network_degradation": network_deg,
+
+        "true_gateway_degradation": gateway_deg,
+
+        "true_bank_degradation": bank_deg,
+
+    })
+
+
+# ============================================================
+# CREATE DATAFRAME
+# ============================================================
+
+df = pd.DataFrame(rows)
+
+
+# ============================================================
+# SHUFFLE
+# ============================================================
+
+df = df.sample(
+
+    frac=1,
+
+    random_state=42,
+
+).reset_index(drop=True)
+
+
+# ============================================================
+# SAVE
+# ============================================================
 
 df.to_csv(
+
     "telemetry_data.csv",
+
     index=False,
+
 )
 
 
-# ------------------------------------------------------------
-# 15. PRINT DATASET INFORMATION
-# ------------------------------------------------------------
+# ============================================================
+# VALIDATION
+# ============================================================
 
-print("=" * 70)
+print("\n" + "=" * 75)
+
 print("RESQ-QR TELEMETRY DATASET GENERATED")
-print("=" * 70)
 
-print(f"Total samples: {len(df)}")
+print("=" * 75)
+
+
+print(
+
+    "\nTotal samples:",
+
+    len(df),
+
+)
+
 
 print("\nAction distribution:")
 
-action_names = {
-    0: "NO_ACTION",
-    1: "CONTEXTUAL_NUDGE",
-    2: "RETRY_PAYMENT",
-    3: "GENERATE_DYNAMIC_QR",
-}
+print(
 
-for label, count in df["action_label"].value_counts().sort_index().items():
+    df["action_label"]
 
-    percentage = count / len(df) * 100
+    .value_counts()
 
-    print(
-        f"{label} - "
-        f"{action_names[label]:22s}: "
-        f"{count:5d} "
-        f"({percentage:.2f}%)"
-    )
+    .sort_index()
+
+)
 
 
-print("\nDataset shape:")
-print(df.shape)
+print("\nExpected:")
 
-print("\nFirst 5 rows:")
-print(df.head())
+print("1 → NO_ACTION              = 3333")
 
-print("\nSaved as:")
-print("telemetry_data.csv")
+print("2 → CONTEXTUAL_NUDGE       = 3333")
+
+print("3 → GENERATE_DYNAMIC_QR    = 3334")
+
+
+print("\nAction percentages:")
+
+print(
+
+    (
+
+        df["action_label"]
+
+        .value_counts(normalize=True)
+
+        .sort_index()
+
+        * 100
+
+    ).round(2)
+
+)
+
+
+print("\nDegradation averages by action:")
+
+print(
+
+    df.groupby("action_label")[
+
+        [
+
+            "true_network_degradation",
+
+            "true_gateway_degradation",
+
+            "true_bank_degradation",
+
+        ]
+
+    ]
+
+    .mean()
+
+    .round(2)
+
+)
+
+
+print("\nMinimum degradation by action:")
+
+print(
+
+    df.groupby("action_label")[
+
+        [
+
+            "true_network_degradation",
+
+            "true_gateway_degradation",
+
+            "true_bank_degradation",
+
+        ]
+
+    ]
+
+    .min()
+
+    .round(2)
+
+)
+
+
+print("\nMaximum degradation by action:")
+
+print(
+
+    df.groupby("action_label")[
+
+        [
+
+            "true_network_degradation",
+
+            "true_gateway_degradation",
+
+            "true_bank_degradation",
+
+        ]
+
+    ]
+
+    .max()
+
+    .round(2)
+
+)
+
+
+print("\n✓ payment_stage is NOT present.")
+
+print("\n✓ Dataset saved as telemetry_data.csv")
+
+print("=" * 75)

@@ -1,4 +1,10 @@
-Classification Winner: XGBoost
+Classification Winner: Random Forest
 Regression Winner: XGBoost
+Dataset action labels: 1=CONTEXTUAL_NUDGE, 2=NO_ACTION, 3=GENERATE_DYNAMIC_QR
+Classification input features: predicted_network_degradation, predicted_gateway_degradation, predicted_bank_degradation
+Regression input: raw observable telemetry only
+Regression excludes: total_latency_ms, transaction_age_ms, retry_count, order_amount_inr, payment_stage
+Classification training: 5-fold out-of-fold regression predictions
+OOF folds: 5
 Classification selection: Macro F1 followed by Weighted F1
 Regression selection: R2 followed by RMSE
