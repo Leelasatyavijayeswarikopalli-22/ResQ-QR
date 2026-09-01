@@ -72,19 +72,16 @@ Bank     → 11.2%
 
 This preserves the **severity information**.
 
-### Classification
+🧠 Classification
 
-The three predicted degradation scores are then used as classifier inputs to select the recovery action:
+The three predicted degradation scores are passed to the classifier to select the safest recovery action.
 
-| Class | Action              |
-| ----- | ------------------- |
-| 1     | Contextual Nudge    |
-| 2     | No Action           |
-| 3     | Generate Dynamic QR |
+Class	Recovery Action	What it means
+1	Contextual Nudge	Bank-side degradation is detected. Inform the user and avoid unnecessary repeated retries.
+2	No Action	Gateway-side degradation is detected. Do not trigger an automatic fallback; allow the gateway path to recover.
+3	Generate Dynamic QR	Network-side degradation is detected. Generate a lightweight dynamic QR so the payment can continue through the fallback path.
 
-This mirrors a real decision system:
-
-**Measure → Diagnose → Decide → Recover**
+This creates a clear Diagnose → Decide → Recover pipeline.
 
 ---
 
