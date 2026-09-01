@@ -20,7 +20,7 @@ import plotly.express as px
 # ===================================================================
 
 st.set_page_config(
-    page_title="ResQ-QR | Intelligent Payment Recovery",
+    page_title="ResQ-QR | Intelligent Network Degradation Detection & QR-Based Payment Recovery",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
