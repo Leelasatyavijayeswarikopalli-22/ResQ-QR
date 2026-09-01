@@ -1,4 +1,4 @@
-# ⚡ ResQ-QR
+# ⚡ ResQ-QR  deployed link :https://resq-qr.streamlit.app/
 
 ### Intelligent Network Degradation Detection & QR-Based Payment Recovery
 
