@@ -50,9 +50,16 @@ The key idea is:
 
 ## 🧠 Why Regression + Classification?
 
-Using only classification would directly predict an action from raw telemetry.
+Real payment failures can involve **multiple degrading components at the same time**.
 
-ResQ-QR separates the problem because the real-world system first needs to understand **what is degrading and by how much**.
+- **Example:** Network degradation = High, Bank degradation = High, Gateway degradation = Low.
+  A simple threshold might trigger QR because the network is degraded. However, the bank is also degraded, so QR may still fail and cause unnecessary retries.
+  
+  **Regression** estimates the severity of all three components, while **Classification** considers their combined condition and selects the appropriate recovery action.
+
+This avoids relying on a single fixed threshold such as *“if network degradation > X, generate QR”* and helps prevent unnecessary retries which is against to our goal.
+
+**Regression measures severity; Classification makes the final recovery decision.**
 
 ### Regression
 
