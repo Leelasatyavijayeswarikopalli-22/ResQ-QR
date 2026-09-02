@@ -93,38 +93,46 @@ This creates a clear **Diagnose → Decide → Recover** pipeline.
 
 ---
 
-## 🏗️ Architecture
-
-```text
-                 RAW TELEMETRY
-                       │
-        ┌──────────────┼──────────────┐
-        ↓              ↓              ↓
-     Network         Gateway          Bank
-     Latency         Latency         Latency
-     Packet Loss     Failures        Failures
-     Jitter          Timeouts        Timeouts
-        └──────────────┼──────────────┘
-                       ↓
-                REGRESSION MODELS
-                       ↓
-        ┌──────────────┼──────────────┐
-        ↓              ↓              ↓
-     Network        Gateway          Bank
-    Degradation    Degradation    Degradation
-        └──────────────┼──────────────┘
-                       ↓
-                 CLASSIFIER
-                       ↓
-             Recovery Decision
-                       ↓
-          ┌────────────┼────────────┐
-          ↓            ↓            ↓
-       Nudge        No Action    Network QR
-                                    ↓
-                           Lightweight Resolver
-                                    ↓
-                                UPI Payment
+                    RAW PAYMENT TELEMETRY
+                              │
+          ┌───────────────────┼───────────────────┐
+          ↓                   ↓                   ↓
+       NETWORK             GATEWAY               BANK
+       Latency              Latency              Latency
+       Packet Loss          Failure Rate         Failure Rate
+       Jitter               Timeout Rate         Timeout Rate
+          └───────────────────┬───────────────────┘
+                              │
+                    PAYMENT ERROR TELEMETRY
+                              │
+                    Error Code Category
+                              │
+                    Timeout Flag
+                 (derived from error code)
+                              │
+                              ↓
+                    REGRESSION MODELS
+                              │
+          ┌───────────────────┼───────────────────┐
+          ↓                   ↓                   ↓
+       Network             Gateway               Bank
+      Degradation         Degradation          Degradation
+          └───────────────────┼───────────────────┘
+                              ↓
+                         CLASSIFIER
+                              ↓
+                    RECOVERY DECISION
+                              │
+             ┌────────────────┼────────────────┐
+             ↓                ↓                ↓
+       Contextual          No Action       Generate
+          Nudge                              Dynamic QR
+                                               │
+                                               ↓
+                                  Lightweight Resolver
+                                               │
+                                               ↓
+                                          UPI Payment
 ```
 
 ---
