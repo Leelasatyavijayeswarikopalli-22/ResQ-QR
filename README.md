@@ -106,8 +106,7 @@ This creates a clear **Diagnose → Decide → Recover** pipeline.
                               │
                     PAYMENT ERROR TELEMETRY
                               │
-                    Error Code Category
-                              │
+                    Error Code Category,
                     Timeout Flag
                  (derived from error code)
                               │
