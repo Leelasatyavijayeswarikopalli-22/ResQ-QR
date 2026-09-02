@@ -199,33 +199,50 @@ Production-related metrics are also measured:
 
 ## 📈 What Do the Metrics Tell Us?
 
-### Regression
+ResQ-QR benchmarks **Random Forest and XGBoost** and selects the best model for each ML stage based on accuracy, prediction quality and deployment performance.
 
-**MAE / RMSE → prediction error**
+### Regression — Infrastructure Degradation Prediction
 
-Lower values mean the predicted degradation is closer to the actual degradation.
+| Model | MAE | RMSE | R² | P95 Inference |
+|---|---:|---:|---:|---:|
+| Random Forest | 2.24319 | 2.87269 | 0.98769 | 1.0659 ms |
+| **XGBoost** | **0.27108** | **0.43873** | **0.99972** | **0.1319 ms** |
 
-**R² → explained variation**
+**XGBoost is selected for regression.**
 
-Closer to `1` means the model explains the degradation patterns better.
+- **MAE = 0.27108** → very small average degradation prediction error.
+- **RMSE = 0.43873** → low error even when larger deviations are considered.
+- **R² = 0.99972** → the model explains almost all variation in the generated degradation data.
+- **P95 = 0.1319 ms** → fast inference suitable for real-time decision making.
 
-### Classification
+### Classification — Recovery Action
 
-**Accuracy → overall correct decisions**
+| Model | Accuracy | Macro F1 | Precision | Recall | P95 Inference |
+|---|---:|---:|---:|---:|---:|
+| **Random Forest** | **100.00%** | **1.0000** | **1.0000** | **1.0000** | 0.7914 ms |
+| XGBoost | 99.93% | 0.9993 | 0.9993 | 0.9993 | **0.0491 ms** |
 
-**Precision → how reliable predicted actions are**
+**Random Forest is selected for classification** because it achieved the highest overall predictive performance on the generated test data.
 
-**Recall → how many relevant cases are detected**
+- **100% Accuracy** → all test cases were classified correctly.
+- **Macro F1 = 1.0000** → balanced performance across all recovery classes.
+- **Precision = 1.0000** → predicted recovery actions were correct.
+- **Recall = 1.0000** → relevant recovery cases were successfully detected.
 
-**Macro F1 → balanced performance across all recovery classes**
+### Why These Results Matter
 
-This is important because incorrectly missing a network-degradation case can prevent the QR fallback from being triggered.
+The regression model provides highly accurate continuous degradation estimates, while the classifier converts those estimates into an appropriate recovery action.
+
+This two-stage approach allows ResQ-QR to distinguish between **network, gateway and bank degradation patterns** instead of relying on a single fixed threshold.
 
 ### Production Metrics
 
-**P95 inference latency** shows how quickly the model responds in near-worst-case normal conditions.
+- **Regression P95: 0.1319 ms** — fast degradation prediction.
+- **Classification P95: 0.7914 ms** — fast recovery-action selection.
+- **Regression model size: 3.127 MB**
+- **Classification model size: 0.754 MB**
 
-**Model size** indicates deployment memory/storage requirements.
+> **Note:** These results are measured on the generated synthetic test dataset. They demonstrate the model's performance on the designed telemetry patterns and should not be interpreted as real-world accuracy on production UPI traffic.
 
 ---
 
