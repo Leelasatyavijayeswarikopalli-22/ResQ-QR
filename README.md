@@ -92,8 +92,8 @@ The three predicted degradation scores are passed to the classifier to select th
 This creates a clear **Diagnose → Decide → Recover** pipeline.
 
 ---
-
-                    RAW PAYMENT TELEMETRY
+## Architecture
+                         RAW TELEMETRY
                               │
           ┌───────────────────┼───────────────────┐
           ↓                   ↓                   ↓
