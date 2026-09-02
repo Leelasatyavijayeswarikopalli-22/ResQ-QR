@@ -133,7 +133,6 @@ This creates a clear **Diagnose → Decide → Recover** pipeline.
                                                │
                                                ↓
                                           UPI Payment
-```
 ### 🔄 5-Fold Out-of-Fold (OOF) Training
 
 To avoid training the classifier on regression predictions produced from the same samples used to train the regression model, ResQ-QR uses **5-fold out-of-fold (OOF) predictions**.
@@ -148,6 +147,7 @@ Training Telemetry
 3 Degradation Scores
         ↓
 Classifier Training
+```
 ---
 
 ## 📊 Synthetic Data Generation
