@@ -1,6 +1,6 @@
 # ⚡ ResQ-QR  
 ### Intelligent Network Degradation Detection & QR-Based Payment Recovery
-deployed link :https://resq-qr.streamlit.app/
+**Deployed Link:** https://resq-qr.streamlit.app/
 
 > **Detect network degradation before repeated payment failures — then switch to a lightweight QR fallback.**
 
@@ -93,6 +93,7 @@ This creates a clear **Diagnose → Decide → Recover** pipeline.
 
 ---
 ## Architecture
+```text
                          RAW TELEMETRY
                               │
           ┌───────────────────┼───────────────────┐
