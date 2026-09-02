@@ -350,15 +350,12 @@ Bank Degradation
 CONTEXTUAL NUDGE
 ```
 
-### Insufficient-funds test
+### Insufficient-Funds Test
 
-Select:
+The error code has four values: `None`, `BANK_OFFLINE`, `TIMEOUT`, and `BAD_FUNDS`.
 
-```text
-1 — BAD_FUNDS
-```
-
-The system handles insufficient funds separately because a QR fallback cannot solve a genuine funds-related rejection.
+- `None`, `BANK_OFFLINE`, and `TIMEOUT` → handled by the **classification model** along with degradation scores to select the recovery action.
+- `BAD_FUNDS` → unrelated to infrastructure degradation, so it **bypasses the recovery decision and never generates a QR**.
 
 ---
 
